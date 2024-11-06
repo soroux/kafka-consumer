@@ -21,28 +21,19 @@ func main() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
+		log.Println("Shutting down gracefully...")
 		cancel()
 	}()
 
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		kafka.StartConsumerGroup(ctx, config.TransactionDailyGroupID)
-	}()
-
-	go func() {
-		defer wg.Done()
-		kafka.StartConsumerGroup(ctx, config.TransactionUserDailyGroupID)
-	}()
+	// Add consumer groups to the wait group
+	groups := []string{config.TransactionDailyGroupID, config.TransactionUserDailyGroupID}
+	for _, groupID := range groups {
+		wg.Add(1)
+		go func(gid string) {
+			defer wg.Done()
+			kafka.StartConsumerGroup(ctx, gid)
+		}(groupID)
+	}
 
 	wg.Wait()
-}
-
-func handleShutdown(cancel context.CancelFunc) {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
-	log.Println("Shutting down gracefully...")
-	cancel()
 }

@@ -10,6 +10,8 @@ import (
 	"sync"
 )
 
+var mu sync.Mutex // mutex to prevent race conditions in database access
+
 func StartConsumerGroup(ctx context.Context, groupID string) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: []string{config.KafkaBroker},
@@ -18,9 +20,9 @@ func StartConsumerGroup(ctx context.Context, groupID string) {
 	})
 	defer reader.Close()
 
-	// Concurrent workers
 	numWorkers := 4
 	var workerWG sync.WaitGroup
+
 	for i := 0; i < numWorkers; i++ {
 		workerWG.Add(1)
 		go func() {

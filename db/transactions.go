@@ -5,8 +5,17 @@ import (
 	"kafka-consumer/config"
 	"kafka-consumer/models"
 	"log"
+	"strconv"
+	"sync"
 	"time"
 )
+
+func getLockForKey(key string) *sync.Mutex {
+	lock, _ := keyLocks.LoadOrStore(key, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+var keyLocks sync.Map // key: string, value: *sync.Mutex
 
 // Process a batch of transactions to create or update the transaction_daily table
 func UpdateTransactionDaily(transactions []models.Transaction) error {
@@ -50,6 +59,10 @@ func UpdateTransactionDaily(transactions []models.Transaction) error {
 		if transaction.Type == "withdraw" {
 			amount = -amount
 		}
+
+		keyLock := getLockForKey(dateString)
+		keyLock.Lock()
+
 		// First, check if the record exists
 		var exists bool
 		err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM transactions_daily WHERE date = $1)`, dateString).Scan(&exists)
@@ -65,6 +78,7 @@ func UpdateTransactionDaily(transactions []models.Transaction) error {
 			// Insert a new record
 			_, err = stmtInsert.Exec(dateString, transaction.Amount)
 		}
+		keyLock.Unlock()
 
 		if err != nil {
 			tx.Rollback()
@@ -123,6 +137,8 @@ func UpdateTransactionUserDaily(transactions []models.Transaction) error {
 		if transaction.Type == "withdraw" {
 			amount = -amount
 		}
+		keyLock := getLockForKey(dateString + "=" + strconv.Itoa(transaction.UserID))
+		keyLock.Lock()
 
 		// Check if the record exists
 		var exists bool
@@ -139,6 +155,7 @@ func UpdateTransactionUserDaily(transactions []models.Transaction) error {
 			// Insert a new record
 			_, err = stmtInsert.Exec(transaction.UserID, dateString, amount)
 		}
+		keyLock.Unlock()
 
 		if err != nil {
 			tx.Rollback()
