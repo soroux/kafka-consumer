@@ -10,8 +10,6 @@ import (
 	"sync"
 )
 
-var mu sync.Mutex // mutex to prevent race conditions in database access
-
 func StartConsumerGroup(ctx context.Context, groupID string) {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers: []string{config.KafkaBroker},
